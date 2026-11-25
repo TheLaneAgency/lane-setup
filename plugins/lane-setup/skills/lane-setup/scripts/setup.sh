@@ -90,7 +90,7 @@ cmd_status() {
         plugins="$("$claude" plugin list 2>/dev/null)"
         if echo "$markets" | grep -q "$LANE_REPO"; then echo "marketplace_lane=yes"; else echo "marketplace_lane=no"; fi
         if echo "$markets" | grep -q "$SETUP_REPO"; then echo "marketplace_lane_setup=yes"; else echo "marketplace_lane_setup=no"; fi
-        echo "installed_lane_plugins=$(echo "$plugins" | grep -oE '[a-z0-9-]+@lane' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+        echo "installed_lane_plugins=$(echo "$plugins" | grep -oE '[a-z0-9-]+@[a-z0-9-]+' | grep '@lane$' | sort -u | tr '\n' ' ' | sed 's/ $//')"
         echo "webtracker=$(yn "$claude" mcp get webtracker)"
     else
         echo "claude=no"
