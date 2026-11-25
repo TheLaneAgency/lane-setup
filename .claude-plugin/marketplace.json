@@ -1,0 +1,19 @@
+{
+  "name": "lane-setup",
+  "description": "Sets up a Lane colleague's Mac for Lane's Claude Code plugins.",
+  "owner": {
+    "name": "Lane Digital",
+    "url": "https://github.com/orgs/TheLaneAgency"
+  },
+  "plugins": [
+    {
+      "name": "lane-setup",
+      "description": "Set up a Lane colleague's Mac for the Lane Claude Code plugins from the Code tab, with no Terminal.",
+      "author": {
+        "name": "Lane Digital"
+      },
+      "category": "productivity",
+      "source": "./plugins/lane-setup"
+    }
+  ]
+}
