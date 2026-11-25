@@ -7,6 +7,8 @@ Gets a Lane colleague's Mac ready for Lane's Claude Code plugins, with no Termin
 1. Open the Claude app and switch to **Claude Code**: the `</>` button at the top of
    the sidebar, beside the chat bubble. The Lane plugins only work there, not in an
    ordinary Claude chat.
+
+   ![The Code button at the top of the Claude app's sidebar](images/code-button.png)
 2. Start a new session and paste:
 
    ```
