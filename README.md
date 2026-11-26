@@ -30,7 +30,8 @@ Code tab session.
 
 This repository is public so it can be installed before GitHub is signed in. It holds
 the setup skill only. The Lane plugins themselves are in the private
-`TheLaneAgency/lane-claude-skills`.
+`TheLaneAgency/lane-claude-skills`, and the build plugins for technical staff in
+`TheLaneAgency/lane-dev-skills`.
 
 `plugins/lane-setup/skills/lane-setup/scripts/setup.sh` does the work; `status` shows
 where a Mac stands.

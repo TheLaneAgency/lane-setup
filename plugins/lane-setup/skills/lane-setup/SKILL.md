@@ -82,11 +82,21 @@ When they say it's done, run `bash <script> gh-finish`.
 
 Ask what they'll use Claude for, and install to match:
 
-- filling stage sites with client copy (account managers): `lane-site-generator`
-- everything Lane has: `all`
+- filling stage sites with client copy (account managers): `lane-populate-content`
+- everything in the Lane marketplace: `all`
+- building, running or hosting WordPress sites (technical staff only): add `dev`, for
+  the site generator, WordPress and hosting plugins. They're in a repo only technical
+  staff can read, so for anyone else it says "no access": tell them to ask Rob if they
+  need them.
 
-Run `bash <script> plugins <names>`, for example `bash <script> plugins lane-site-generator`.
-It also installs this setup skill, so "run lane-setup" works next time.
+Run `bash <script> plugins <names>`, for example `bash <script> plugins lane-populate-content`
+or `bash <script> plugins all dev`. It also installs this setup skill, so "run
+lane-setup" works next time.
+
+Those three plugins used to be in the Lane marketplace. When the script finds one
+installed from there, it removes that copy (saying "removed"), and if it was the site
+generator, installs `lane-populate-content` so they keep filling stage sites. Tell them
+in a line, and ask whether they need `dev` if they used to build or host sites.
 
 ## 5. pandoc and the PATH (`pandoc`, `path`)
 
@@ -133,7 +143,7 @@ script can't see:
   reach Chrome, tell them to click the Claude icon in Chrome's toolbar and make sure
   it's signed in and connected.
 
-If they installed `lane-site-generator`, finish with a real check: ask which stage
+If they installed `lane-populate-content`, finish with a real check: ask which stage
 site they'll work on first and ask, as them, "Am I signed in to <site> for
 populate-content? Sign me in through WebTracker if not." That runs the populate-content
 skill's sign-in. If it says they have no account on the site, a developer adds them

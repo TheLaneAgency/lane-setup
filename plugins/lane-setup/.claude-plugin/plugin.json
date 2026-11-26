@@ -1,6 +1,6 @@
 {
   "name": "lane-setup",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Set up a Lane colleague's Mac for the Lane Claude Code plugins from the Code tab, with no Terminal: Apple's command line tools, GitHub sign-in in the browser, the Lane plugins, pandoc, WebTracker and Claude in Chrome.",
   "author": {
     "name": "Lane Digital"

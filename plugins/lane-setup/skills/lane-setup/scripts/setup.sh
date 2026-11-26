@@ -10,7 +10,8 @@
 #   setup.sh pandoc                 installs pandoc into ~/.local/bin
 #   setup.sh path                   puts ~/.local/bin on the PATH for new sessions
 #   setup.sh plugins [name ...]     adds the Lane marketplaces and installs plugins
-#                                   (lane-site-generator if none named, "all" for every one)
+#                                   (lane-populate-content if none named, "all" for every
+#                                   one in lane, "dev" for the build plugins in lane-dev)
 #   setup.sh webtracker             connects WebTracker; reads the token on stdin
 #
 # Nothing here needs admin rights or Homebrew.
@@ -21,6 +22,8 @@ BIN="$HOME/.local/bin"
 SHARE="$HOME/.local/share/lane-setup"
 LOGIN_LOG="$SHARE/gh-login.log"
 LANE_REPO="TheLaneAgency/lane-claude-skills"
+LANE_DEV_REPO="TheLaneAgency/lane-dev-skills"
+DEV_PLUGINS="lane-site-generator lane-wordpress lane-hosting"
 SETUP_REPO="TheLaneAgency/lane-setup"
 WEBTRACKER_MCP="https://webtracker.thelane.io/mcp"
 CHROME_EXT="fcoeoabgfenejglbffodgkkbkcdhcgfn"
@@ -191,15 +194,52 @@ cmd_plugins() {
         "$claude" plugin marketplace add "$LANE_REPO" || return 1
     fi
     local names=("$@")
-    [ ${#names[@]} -eq 0 ] && names=(lane-site-generator)
+    [ ${#names[@]} -eq 0 ] && names=(lane-populate-content)
     if [ "${names[0]}" = all ]; then
         names=($(grep -oE '"name": *"[a-z0-9-]+"' "$HOME/.claude/plugins/marketplaces/lane/.claude-plugin/marketplace.json" 2>/dev/null \
             | sed -E 's/.*"([a-z0-9-]+)"$/\1/' | grep -v '^lane$' | grep -v '^Lane'))
     fi
     local n failed=0
     for n in "${names[@]}"; do
+        [ "$n" = dev ] && continue
         if "$claude" plugin install "$n@lane" >/dev/null 2>&1; then echo "installed $n"; else echo "failed $n"; failed=1; fi
     done
+    for n in "$@"; do
+        [ "$n" = dev ] && { dev_plugins "$claude" || failed=1; }
+    done
+    move_old_dev_plugins "$claude" || failed=1
+    return $failed
+}
+
+# The build plugins (site generator, WordPress, hosting) are in their own repo, which only
+# technical staff can read, so "plugins dev" fails for anyone else with "no access".
+dev_plugins() {
+    local claude="$1" n failed=0
+    if "$claude" plugin marketplace list 2>/dev/null | grep -q "$LANE_DEV_REPO"; then
+        "$claude" plugin marketplace update lane-dev >/dev/null 2>&1
+    elif ! "$claude" plugin marketplace add "$LANE_DEV_REPO" >/dev/null 2>&1; then
+        echo "no access to $LANE_DEV_REPO"
+        return 1
+    fi
+    for n in $DEV_PLUGINS; do
+        if "$claude" plugin install "$n@lane-dev" >/dev/null 2>&1; then echo "installed $n"; else echo "failed $n"; failed=1; fi
+    done
+    return $failed
+}
+
+# Until 26 November 2026 the build plugins were in the lane marketplace. A copy installed
+# from there is removed. Someone who had lane-site-generator for populate-content gets
+# lane-populate-content in its place, so they keep the skill.
+move_old_dev_plugins() {
+    local claude="$1" n installed failed=0
+    installed="$("$claude" plugin list 2>/dev/null)"
+    for n in $DEV_PLUGINS; do
+        echo "$installed" | grep -qE "$n@lane$" || continue
+        if "$claude" plugin uninstall "$n@lane" >/dev/null 2>&1; then echo "removed $n@lane"; else echo "failed to remove $n@lane"; failed=1; fi
+    done
+    if echo "$installed" | grep -qE "lane-site-generator@lane$" && ! echo "$installed" | grep -qE "lane-populate-content@lane$"; then
+        if "$claude" plugin install lane-populate-content@lane >/dev/null 2>&1; then echo "installed lane-populate-content"; else echo "failed lane-populate-content"; failed=1; fi
+    fi
     return $failed
 }
 
