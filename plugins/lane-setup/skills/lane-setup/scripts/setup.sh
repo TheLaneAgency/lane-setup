@@ -1,18 +1,20 @@
 #!/bin/bash
-# Lane setup: gets a colleague's Mac ready for the Lane Claude Code plugins,
-# with no Terminal. Claude runs each command from the lane-setup skill.
+# Lane setup: gets a Lane developer's Mac ready for the build plugins in
+# TheLaneAgency/lane-dev-skills (site generator, WordPress, hosting), from the Code tab.
+# Claude runs each command from the lane-setup skill.
 #
-#   setup.sh status                 what's done and what isn't, as key=value lines
-#   setup.sh clt                    opens Apple's installer for git and python3
-#   setup.sh gh                     installs GitHub's gh tool into ~/.local/bin
-#   setup.sh gh-login               starts the browser sign-in and prints the one-time code
-#   setup.sh gh-finish              after the code is approved: sets git up to use gh
-#   setup.sh pandoc                 installs pandoc into ~/.local/bin
-#   setup.sh path                   puts ~/.local/bin on the PATH for new sessions
-#   setup.sh plugins [name ...]     adds the Lane marketplaces and installs plugins
-#                                   (lane-populate-content if none named, "all" for every
-#                                   one in lane, "dev" for the build plugins in lane-dev)
-#   setup.sh webtracker             connects WebTracker; reads the token on stdin
+#   setup.sh status        what's done and what isn't, as key=value lines
+#   setup.sh clt           opens Apple's installer for git and python3
+#   setup.sh gh            installs GitHub's gh tool into ~/.local/bin
+#   setup.sh gh-login      starts the browser sign-in and prints the one-time code
+#   setup.sh gh-finish     after the code is approved: sets git up to use gh
+#   setup.sh path          puts ~/.local/bin on the PATH for new sessions
+#   setup.sh plugins       adds the lane-dev marketplace and installs its plugins
+#   setup.sh webtracker    connects WebTracker; reads the token on stdin
+#   setup.sh check         the site generator's own check of Herd, WP-CLI, Node and the rest
+#
+# Everyone else's Lane plugins (timesheet, populate-content and the rest) come through
+# Lane's Claude Team account, and each sets up what it needs on its first run.
 #
 # Nothing here needs admin rights or Homebrew.
 
@@ -21,12 +23,12 @@ set -u
 BIN="$HOME/.local/bin"
 SHARE="$HOME/.local/share/lane-setup"
 LOGIN_LOG="$SHARE/gh-login.log"
-LANE_REPO="TheLaneAgency/lane-claude-skills"
-LANE_DEV_REPO="TheLaneAgency/lane-dev-skills"
+DEV_REPO="TheLaneAgency/lane-dev-skills"
 DEV_PLUGINS="lane-site-generator lane-wordpress lane-hosting"
 SETUP_REPO="TheLaneAgency/lane-setup"
 WEBTRACKER_MCP="https://webtracker.thelane.io/mcp"
 CHROME_EXT="fcoeoabgfenejglbffodgkkbkcdhcgfn"
+PLUGINS_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins"
 
 mkdir -p "$BIN" "$SHARE"
 export PATH="$BIN:$PATH"
@@ -73,14 +75,13 @@ cmd_status() {
         else
             echo "git_uses_gh=no"
         fi
-        echo "lane_repo_access=$(yn gh api "repos/$LANE_REPO" --silent)"
+        echo "dev_repo_access=$(yn gh api "repos/$DEV_REPO" --silent)"
     else
         echo "gh=no"
         echo "gh_signed_in=no"
         echo "git_uses_gh=no"
-        echo "lane_repo_access=no"
+        echo "dev_repo_access=no"
     fi
-    echo "pandoc=$(yn command -v pandoc)"
     if grep -qs '.local/bin' "$HOME/.zprofile" && grep -qs '.local/bin' "$HOME/.zshrc"; then
         echo "path=yes"
     else
@@ -91,9 +92,10 @@ cmd_status() {
         local markets plugins
         markets="$("$claude" plugin marketplace list 2>/dev/null)"
         plugins="$("$claude" plugin list 2>/dev/null)"
-        if echo "$markets" | grep -q "$LANE_REPO"; then echo "marketplace_lane=yes"; else echo "marketplace_lane=no"; fi
+        if echo "$markets" | grep -q "$DEV_REPO"; then echo "marketplace_lane_dev=yes"; else echo "marketplace_lane_dev=no"; fi
         if echo "$markets" | grep -q "$SETUP_REPO"; then echo "marketplace_lane_setup=yes"; else echo "marketplace_lane_setup=no"; fi
-        echo "installed_lane_plugins=$(echo "$plugins" | grep -oE '[a-z0-9-]+@[a-z0-9-]+' | grep '@lane$' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+        echo "installed_dev_plugins=$(echo "$plugins" | grep -oE '[a-z0-9-]+@lane-dev$' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+        echo "old_lane_copies=$(echo "$plugins" | grep -oE '(lane-site-generator|lane-wordpress|lane-hosting)@lane$' | sort -u | tr '\n' ' ' | sed 's/ $//')"
         echo "webtracker=$(yn "$claude" mcp get webtracker)"
     else
         echo "claude=no"
@@ -133,13 +135,6 @@ cmd_gh() {
     install_zip "https://github.com/cli/cli/releases/download/$tag/gh_${tag#v}_macOS_$arch.zip" gh gh
 }
 
-cmd_pandoc() {
-    if command -v pandoc >/dev/null 2>&1; then pandoc --version | head -1; return 0; fi
-    local tag; tag="$(latest_tag jgm/pandoc)"
-    [ -n "$tag" ] || { echo "couldn't find the latest pandoc release"; return 1; }
-    install_zip "https://github.com/jgm/pandoc/releases/download/$tag/pandoc-$tag-$(arch_name)-macOS.zip" pandoc pandoc
-}
-
 cmd_gh_login() {
     command -v gh >/dev/null 2>&1 || { echo "gh isn't installed yet: run setup.sh gh"; return 1; }
     if gh auth status --hostname github.com >/dev/null 2>&1; then echo "already signed in"; return 0; fi
@@ -166,10 +161,10 @@ cmd_gh_finish() {
     fi
     gh auth setup-git --hostname github.com || return 1
     echo "signed in as $(gh api user --jq .login)"
-    if gh api "repos/$LANE_REPO" --silent >/dev/null 2>&1; then
-        echo "lane_repo_access=yes"
+    if gh api "repos/$DEV_REPO" --silent >/dev/null 2>&1; then
+        echo "dev_repo_access=yes"
     else
-        echo "lane_repo_access=no"
+        echo "dev_repo_access=no"
     fi
 }
 
@@ -185,52 +180,27 @@ cmd_plugins() {
     local claude; claude="$(claude_bin)"
     [ -n "$claude" ] || { echo "can't find Claude Code: run this from a Code tab session"; return 1; }
     clt_ready || { echo "git isn't installed yet: run setup.sh clt"; return 1; }
-    local markets; markets="$("$claude" plugin marketplace list 2>/dev/null)"
-    echo "$markets" | grep -q "$SETUP_REPO" || "$claude" plugin marketplace add "$SETUP_REPO" || return 1
+    local markets n failed=0
+    markets="$("$claude" plugin marketplace list 2>/dev/null)"
+    echo "$markets" | grep -q "$SETUP_REPO" || "$claude" plugin marketplace add "$SETUP_REPO" >/dev/null 2>&1 || return 1
     "$claude" plugin install lane-setup@lane-setup >/dev/null 2>&1 || true
-    if echo "$markets" | grep -q "$LANE_REPO"; then
-        "$claude" plugin marketplace update lane >/dev/null 2>&1
-    else
-        "$claude" plugin marketplace add "$LANE_REPO" || return 1
-    fi
-    local names=("$@")
-    [ ${#names[@]} -eq 0 ] && names=(lane-populate-content)
-    if [ "${names[0]}" = all ]; then
-        names=($(grep -oE '"name": *"[a-z0-9-]+"' "$HOME/.claude/plugins/marketplaces/lane/.claude-plugin/marketplace.json" 2>/dev/null \
-            | sed -E 's/.*"([a-z0-9-]+)"$/\1/' | grep -v '^lane$' | grep -v '^Lane'))
-    fi
-    local n failed=0
-    for n in "${names[@]}"; do
-        [ "$n" = dev ] && continue
-        if "$claude" plugin install "$n@lane" >/dev/null 2>&1; then echo "installed $n"; else echo "failed $n"; failed=1; fi
-    done
-    for n in "$@"; do
-        [ "$n" = dev ] && { dev_plugins "$claude" || failed=1; }
-    done
-    move_old_dev_plugins "$claude" || failed=1
-    return $failed
-}
-
-# The build plugins (site generator, WordPress, hosting) are in their own repo, which only
-# technical staff can read, so "plugins dev" fails for anyone else with "no access".
-dev_plugins() {
-    local claude="$1" n failed=0
-    if "$claude" plugin marketplace list 2>/dev/null | grep -q "$LANE_DEV_REPO"; then
+    if echo "$markets" | grep -q "$DEV_REPO"; then
         "$claude" plugin marketplace update lane-dev >/dev/null 2>&1
-    elif ! "$claude" plugin marketplace add "$LANE_DEV_REPO" >/dev/null 2>&1; then
-        echo "no access to $LANE_DEV_REPO"
+    elif ! "$claude" plugin marketplace add "$DEV_REPO" >/dev/null 2>&1; then
+        echo "no access to $DEV_REPO"
         return 1
     fi
     for n in $DEV_PLUGINS; do
         if "$claude" plugin install "$n@lane-dev" >/dev/null 2>&1; then echo "installed $n"; else echo "failed $n"; failed=1; fi
     done
+    move_old_copies "$claude" || failed=1
     return $failed
 }
 
-# Until 26 November 2026 the build plugins were in the lane marketplace. A copy installed
-# from there is removed. Someone who had lane-site-generator for populate-content gets
-# lane-populate-content in its place, so they keep the skill.
-move_old_dev_plugins() {
+# Until 26 November 2026 the build plugins were in the lane marketplace, and a copy
+# installed from there stops loading. It's removed. Someone who had the site generator
+# for populate-content gets lane-populate-content in its place, so they keep the skill.
+move_old_copies() {
     local claude="$1" n installed failed=0
     installed="$("$claude" plugin list 2>/dev/null)"
     for n in $DEV_PLUGINS; do
@@ -255,15 +225,21 @@ cmd_webtracker() {
     echo "connected"
 }
 
+cmd_check() {
+    local script="$PLUGINS_DIR/marketplaces/lane-dev/plugins/lane-site-generator/skills/generate-site/scripts/check-env.sh"
+    [ -f "$script" ] || { echo "the site generator isn't installed yet: run setup.sh plugins"; return 1; }
+    bash "$script"
+}
+
 case "${1:-status}" in
     status) cmd_status ;;
     clt) cmd_clt ;;
     gh) cmd_gh ;;
     gh-login) cmd_gh_login ;;
     gh-finish) cmd_gh_finish ;;
-    pandoc) cmd_pandoc ;;
     path) cmd_path ;;
-    plugins) shift; cmd_plugins "$@" ;;
+    plugins) cmd_plugins ;;
     webtracker) cmd_webtracker ;;
+    check) cmd_check ;;
     *) echo "unknown command: $1"; exit 2 ;;
 esac
